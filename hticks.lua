@@ -24,7 +24,7 @@ hp
 addon.author   = 'MathMatic';
 addon.name     = 'hticks';
 addon.desc     = 'Shows the amount of time until the next heal tick.';
-addon.version  = '1.0.0';
+addon.version  = '1.0.1';
 -- The idea for this addon is based off of ticker which was originally written by
 -- Almavivaconte & ported to Ashita v4 by Zal Das, & GetAwayCoxn. It has been completely
 -- rewritten using imgui to provide more graphical options.
@@ -68,7 +68,7 @@ function renderMenu()
 	if (imgui.Begin('hticks Configuration Menu', true, bit.bor(ImGuiWindowFlags_NoSavedSettings))) then
 		imgui.Text("Display Options");
 		imgui.BeginChild('display_settings', { 0, 300, }, true);
-			imgui.SliderFloat('Window Scale', hticks.settings.window.scale, 0.1, 2.0, '%.2f');
+			imgui.SliderFloat('Window Scale', hticks.settings.window.scale, 0.5, 1.5, '%.1f');
 			imgui.ShowHelp('Scale the window bigger/smaller.');
 
 			imgui.SliderFloat('Window Opacity', hticks.settings.window.opacity, 0.0, 1.0, '%.2f');
@@ -78,8 +78,8 @@ function renderMenu()
 			imgui.ColorEdit4("Border Color", hticks.settings.window.borderColor);
 			imgui.ColorEdit4("Background Color", hticks.settings.window.backgroundColor);
 
-			imgui.Checkbox('Resync Ticks', hticks.settings.resyncTicks);
-			imgui.ShowHelp('Resync the tick counter when hp/mp increases while resting. Note: This will lead to the counter jumping around a *lot*.');
+			--imgui.Checkbox('Resync Ticks', hticks.settings.resyncTicks);
+			--imgui.ShowHelp('Resync the tick counter when hp/mp increases while resting. Note: This will lead to the counter jumping around a *lot*.');
 
 			imgui.Checkbox('Always Show Window', hticks.settings.alwaysVisible);
 			imgui.ShowHelp('Shows the tick window even when not resting.');
@@ -102,18 +102,18 @@ end
 --------------------------------------------------------------------
 function renderTickWindow(player)
 
-	local windowSize = 10 * hticks.settings.window.scale[1];
+	local windowSize = 40 * hticks.settings.window.scale[1];
     imgui.SetNextWindowBgAlpha(hticks.settings.window.opacity[1]);
-    --rimgui.SetNextWindowSize({ windowSize, -1, }, ImGuiCond_Always);
+    imgui.SetNextWindowSize({ windowSize, -1, }, ImGuiCond_Always);
 	imgui.PushStyleColor(ImGuiCol_WindowBg, hticks.settings.window.backgroundColor);
 	imgui.PushStyleColor(ImGuiCol_Border, hticks.settings.window.borderColor);
 	imgui.PushStyleColor(ImGuiCol_Text, hticks.settings.window.textColor);
 
 	if (imgui.Begin('hticks', true, bit.bor(ImGuiWindowFlags_NoDecoration))) then
-		imgui.SetWindowFontScale(hticks.settings.window.scale[1]);
+		imgui.SetWindowFontScale(2 * hticks.settings.window.scale[1]);
 
 		if (player.Status ~= 33) then
-			imgui.Text("Not healing");
+			imgui.Text("20");
 		else
 			if (hticks.heal == false) then
 				hticks.nextTick = os.time() + 21;
@@ -124,6 +124,7 @@ function renderTickWindow(player)
 				hticks.nextTick = os.time() + 10;
 			end
 
+			--[[
 			if (hticks.settings.resyncTicks[1] == true) then
 				local party = AshitaCore:GetMemoryManager():GetParty();
 				local selfIndex = party:GetMemberTargetIndex(0);
@@ -141,10 +142,16 @@ function renderTickWindow(player)
 				hticks.curMP = mp;
 
 			end
-
-			if (hticks.nextTick - os.time() <= 20) then --hide at start (when ticks is 21)
-				imgui.Text(tostring(hticks.nextTick - os.time()));
+			--]]
+			
+			local ticksRemaining = "20";
+			
+			if (hticks.nextTick - os.time() < 20) then
+				ticksRemaining = tostring(hticks.nextTick - os.time());
 			end
+
+			imgui.SetCursorPosX(imgui.GetCursorPosX() + imgui.GetColumnWidth() - imgui.CalcTextSize(ticksRemaining));
+			imgui.Text(tostring(ticksRemaining));
 		end
 		
 		imgui.SetWindowFontScale(1.0); -- reset window scale
