@@ -24,7 +24,7 @@ hp
 addon.author   = 'MathMatic';
 addon.name     = 'hticks';
 addon.desc     = 'Shows the amount of time until the next heal tick.';
-addon.version  = '1.0.1';
+addon.version  = '1.0.2';
 -- The idea for this addon is based off of ticker which was originally written by
 -- Almavivaconte & ported to Ashita v4 by Zal Das, & GetAwayCoxn. It has been completely
 -- rewritten using imgui to provide more graphical options.
@@ -45,7 +45,6 @@ local defaultConfig = T{
 	resyncTicks		= T{false},
 	alwaysVisible	= T{false},
 }
-local config = settings.load(defaultConfig);
 
 local hticks = T{
 	settings = settings.load(defaultConfig);
