@@ -24,7 +24,7 @@ hp
 addon.author   = 'MathMatic';
 addon.name     = 'hticks';
 addon.desc     = 'Shows the amount of time until the next heal tick.';
-addon.version  = '1.0.2';
+addon.version  = '1.0.3';
 -- The idea for this addon is based off of ticker which was originally written by
 -- Almavivaconte & ported to Ashita v4 by Zal Das, & GetAwayCoxn. It has been completely
 -- rewritten using imgui to provide more graphical options.
@@ -42,15 +42,15 @@ local defaultConfig = T{
 		textColor		= T{1.00, 1.00, 1.00, 1.0},
 		borderColor		= T{0.00, 0.00, 0.00, 1.0},	
 	},
-	resyncTicks		= T{false},
+	--resyncTicks		= T{false},
 	alwaysVisible	= T{false},
 }
 
 local hticks = T{
 	settings = settings.load(defaultConfig);
 
-	curHP		= 0;
-	curMP		= 0;
+	--curHP		= 0;
+	--curMP		= 0;
 	nextTick	= 0;
 	heal		= true;
 
@@ -64,7 +64,7 @@ local hticks = T{
 function renderMenu()
 
 	imgui.SetNextWindowSize({500});
-	if (imgui.Begin('hticks Configuration Menu', true, bit.bor(ImGuiWindowFlags_NoSavedSettings))) then
+	if (imgui.Begin('hticks Configuration Menu', true)) then
 		imgui.Text("Display Options");
 		imgui.BeginChild('display_settings', { 0, 300, }, true);
 			imgui.SliderFloat('Window Scale', hticks.settings.window.scale, 0.5, 1.5, '%.1f');
@@ -193,7 +193,18 @@ end);
 
 --------------------------------------------------------------------
 ashita.events.register('unload', 'unload_cb', function()
+    settings.save();
+end);
 
+--------------------------------------------------------------------
+settings.register('settings', 'settings_update', function(s)
+    -- Update the settings table..
+    if (s ~= nil) then
+        hticks.settings = s;
+    end
+
+    -- Save the current settings..
+    settings.save();
 end);
 
 --------------------------------------------------------------------
