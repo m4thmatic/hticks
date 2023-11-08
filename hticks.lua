@@ -24,41 +24,78 @@ hp
 addon.author   = 'MathMatic';
 addon.name     = 'hticks';
 addon.desc     = 'Shows the amount of time until the next heal tick.';
-addon.version  = '1.0.3';
--- The idea for this addon is based off of ticker which was originally written by
--- Almavivaconte & ported to Ashita v4 by Zal Das, & GetAwayCoxn. It has been completely
--- rewritten using imgui to provide more graphical options.
+addon.version  = '1.1.0';
 
 require ('common');
 local imgui = require('imgui');
 local settings = require('settings');
 local chat = require('chat');
+local gdi = require('gdifonts.include');
+local ffi = require('ffi');
+
+ffi.cdef[[
+    int16_t GetKeyState(int32_t vkey);
+]]
 
 local defaultConfig = T{
-	window = T{
-		scale			= T{1.0},
-		opacity			= T{0.8},
-		backgroundColor	= T{0.23, 0.23, 0.26, 1.0},
-		textColor		= T{1.00, 1.00, 1.00, 1.0},
-		borderColor		= T{0.00, 0.00, 0.00, 1.0},	
-	},
-	--resyncTicks		= T{false},
-	alwaysVisible	= T{false},
+	textSize     = 12,
+	textOpacity	 = 1.0,
+	textColor	 = T{1.00, 1.00, 1.00, 1.0},
+	textColor2	 = T{1.00, 1.00, 1.00, 1.0},
+	outlineColor = T{0.00, 0.00, 0.00, 1.0},	
+	outlineWidth = 4,
+	position_x   = 100;
+	position_y   = 100;
+	alwaysShow	= false,
 }
 
 local hticks = T{
 	settings = settings.load(defaultConfig);
-
-	--curHP		= 0;
-	--curMP		= 0;
 	nextTick	= 0;
 	heal		= true;
-
 	configMenuOpen = false;
 }
 
+local fontSettings = {
+    box_height = 0,
+    box_width = 0,
+    font_family = 'Courier New',
+    font_flags = gdi.FontFlags.Bold,
+    font_alignment = gdi.Alignment.Center,
+    font_height = hticks.settings.textSize * 2,
+    font_color = 0xFFFFFFFF,
+    gradient_color = 0xFFFFFFFF,
+    outline_color = 0xFF000000,
+    gradient_style = gdi.Gradient.TopToBottom,
+    outline_width = hticks.settings.outlineWidth,
+    position_x = hticks.settings.position_x,
+    position_y = hticks.settings.position_y,
+    visible = true,
+    text = '',
+};
+local myFontObject;
+
+local lastPositionX, lastPositionY;
+local dragActive = false;
 
 
+--------------------------------------------------------------------
+function hexToRBG(hexVal)
+	local alpha = bit.band(bit.rshift(hexVal, 24), 0xff)/0xff;
+	local red   = bit.band(bit.rshift(hexVal, 16), 0xff)/0xff;
+	local green = bit.band(bit.rshift(hexVal,  8), 0xff)/0xff;
+	local blue  = bit.band(bit.rshift(hexVal,  0), 0xff)/0xff;
+
+	--return alpha, red, green, blue;
+	return red, green, blue;
+end
+
+function argbToHex(alpha, red, green, blue)
+	return	math.floor(alpha * 0xff) * 0x1000000 + 
+			bit.lshift(red   * 0xff, 16) +
+			bit.lshift(green * 0xff,  8) +
+			bit.lshift(blue  * 0xff,  0);
+end
 
 --------------------------------------------------------------------
 function renderMenu()
@@ -67,21 +104,39 @@ function renderMenu()
 	if (imgui.Begin('hticks Configuration Menu', true)) then
 		imgui.Text("Display Options");
 		imgui.BeginChild('display_settings', { 0, 300, }, true);
-			imgui.SliderFloat('Window Scale', hticks.settings.window.scale, 0.5, 1.5, '%.1f');
-			imgui.ShowHelp('Scale the window bigger/smaller.');
+			local textOpacity  = T{hticks.settings.textOpacity};
+			local textSize     = T{hticks.settings.textSize};			
+			local outlineWidth = T{hticks.settings.outlineWidth};
+			local alwaysShow   = T{hticks.settings.alwaysShow};			
 
-			imgui.SliderFloat('Window Opacity', hticks.settings.window.opacity, 0.0, 1.0, '%.2f');
-			imgui.ShowHelp('Set the window opacity.');
+			imgui.SliderFloat('Window Opacity', textOpacity, 0.01, 1.0, '%.2f');
+			imgui.ShowHelp('Set the window opacity.');		
+			hticks.settings.textOpacity = textOpacity[1];
+			
+			imgui.SliderFloat('Font Size', textSize, 5, 40, '%1.0f');
+			imgui.ShowHelp('Set the font size.');
+			hticks.settings.textSize = textSize[1];
+			myFontObject:set_font_height(hticks.settings.textSize * 2);
 
-			imgui.ColorEdit4("Text Color", hticks.settings.window.textColor);
-			imgui.ColorEdit4("Border Color", hticks.settings.window.borderColor);
-			imgui.ColorEdit4("Background Color", hticks.settings.window.backgroundColor);
+			imgui.ColorEdit3("Top Color", hticks.settings.textColor);
+			imgui.ColorEdit3("Bottom Color", hticks.settings.textColor2);
+			imgui.ColorEdit3("Outline Color", hticks.settings.outlineColor);
+			
+			local tc = hticks.settings.textColor;
+			local tc2 = hticks.settings.textColor2;
+			local oc = hticks.settings.outlineColor;
+			myFontObject:set_font_color(argbToHex(hticks.settings.textOpacity, tc[1], tc[2], tc[3]));
+			myFontObject:set_gradient_color(argbToHex(hticks.settings.textOpacity, tc2[1], tc2[2], tc2[3]));
+			myFontObject:set_outline_color(argbToHex(hticks.settings.textOpacity, oc[1], oc[2], oc[3]));
 
-			--imgui.Checkbox('Resync Ticks', hticks.settings.resyncTicks);
-			--imgui.ShowHelp('Resync the tick counter when hp/mp increases while resting. Note: This will lead to the counter jumping around a *lot*.');
-
-			imgui.Checkbox('Always Show Window', hticks.settings.alwaysVisible);
+			imgui.SliderFloat('Outline Width', outlineWidth, 0, 10, '%1.0f');
+			imgui.ShowHelp('Set the thickness of the text outline.');
+			hticks.settings.outlineWidth = outlineWidth[1];
+			myFontObject:set_outline_width(hticks.settings.outlineWidth)
+			
+			imgui.Checkbox('Always Show Window', alwaysShow);
 			imgui.ShowHelp('Shows the tick window even when not resting.');
+			hticks.settings.alwaysShow = alwaysShow[1];
 		imgui.EndChild();
 
 		if (imgui.Button('  Save  ')) then
@@ -101,62 +156,27 @@ end
 --------------------------------------------------------------------
 function renderTickWindow(player)
 
-	local windowSize = 40 * hticks.settings.window.scale[1];
-    imgui.SetNextWindowBgAlpha(hticks.settings.window.opacity[1]);
-    imgui.SetNextWindowSize({ windowSize, -1, }, ImGuiCond_Always);
-	imgui.PushStyleColor(ImGuiCol_WindowBg, hticks.settings.window.backgroundColor);
-	imgui.PushStyleColor(ImGuiCol_Border, hticks.settings.window.borderColor);
-	imgui.PushStyleColor(ImGuiCol_Text, hticks.settings.window.textColor);
-
-	if (imgui.Begin('hticks', true, bit.bor(ImGuiWindowFlags_NoDecoration))) then
-		imgui.SetWindowFontScale(2 * hticks.settings.window.scale[1]);
-
-		if (player.Status ~= 33) then
-			imgui.Text("20");
-		else
-			if (hticks.heal == false) then
-				hticks.nextTick = os.time() + 21;
-				hticks.heal = true;
-			end
+	if (player.Status ~= 33) then
+		myFontObject:set_text("20");
+	else
+		if (hticks.heal == false) then
+			hticks.nextTick = os.time() + 21;
+			hticks.heal = true;
+		end
 			
-			if (hticks.nextTick - os.time() <= 0) then
-				hticks.nextTick = os.time() + 10;
-			end
-
-			--[[
-			if (hticks.settings.resyncTicks[1] == true) then
-				local party = AshitaCore:GetMemoryManager():GetParty();
-				local selfIndex = party:GetMemberTargetIndex(0);
-			
-				local hp = party:GetMemberHP(0);
-				local mp = party:GetMemberMP(0);
-				
-				if (hticks.nextTick - os.time() <= 10) then
-					if ((hp > hticks.curHP + 10) or (mp > hticks.curMP + 12)) then
-						hticks.nextTick = os.time() + 10;
-					end
-				end
-			
-				hticks.curHP = hp;
-				hticks.curMP = mp;
-
-			end
-			--]]
-			
-			local ticksRemaining = "20";
-			
-			if (hticks.nextTick - os.time() < 20) then
-				ticksRemaining = tostring(hticks.nextTick - os.time());
-			end
-
-			imgui.SetCursorPosX(imgui.GetCursorPosX() + imgui.GetColumnWidth() - imgui.CalcTextSize(ticksRemaining));
-			imgui.Text(tostring(ticksRemaining));
+		if (hticks.nextTick - os.time() <= 0) then
+			hticks.nextTick = os.time() + 10;
 		end
 		
-		imgui.SetWindowFontScale(1.0); -- reset window scale
-    end
-    imgui.PopStyleColor(3);
-	imgui.End();
+		local ticksRemaining = "20";
+			
+		if (hticks.nextTick - os.time() < 20) then
+			ticksRemaining = tostring(hticks.nextTick - os.time());
+		end
+
+		myFontObject:set_text(tostring(ticksRemaining));
+	end
+
 end
 
 --------------------------------------------------------------------------------
@@ -187,13 +207,39 @@ function hideWindow()
 end
 
 --------------------------------------------------------------------
-ashita.events.register('load', 'load_cb', function()
+local function HitTest(x, y)
+    local rect = myFontObject.rect;
+    if (rect) then
+        local currentX = myFontObject.settings.position_x;
+        local currentY = myFontObject.settings.position_y;
+        return (x >= currentX) and (x <= (currentX + rect.right)) and (y >= currentY) and ((y <= currentY + rect.bottom));
+    else
+        return false;
+    end        
+end
 
+local function IsControlHeld()
+    return (bit.band(ffi.C.GetKeyState(0x10), 0x8000) ~= 0);
+end
+
+--------------------------------------------------------------------
+ashita.events.register('load', 'load_cb', function()
+	myFontObject = gdi:create_object(fontSettings, false);
+
+--	local tc = hticks.settings.textColor;
+--	local tc2 = hticks.settings.textColor2;
+--	local oc = hticks.settings.outlineColor;
+--	myFontObject:set_font_color(argbToHex(hticks.settings.textOpacity, tc[1], tc[2], tc[3]));
+--	myFontObject:set_gradient_color(argbToHex(hticks.settings.textOpacity, tc2[1], tc2[2], tc2[3]));
+--	myFontObject:set_outline_color(argbToHex(hticks.settings.textOpacity, oc[1], oc[2], oc[3]));
+--	myFontObject:set_position_x(hticks.settings.position_x);
+--	myFontObject:set_position_y(hticks.settings.position_y);
 end);
 
 --------------------------------------------------------------------
 ashita.events.register('unload', 'unload_cb', function()
     settings.save();
+	gdi:destroy_interface();
 end);
 
 --------------------------------------------------------------------
@@ -201,8 +247,19 @@ settings.register('settings', 'settings_update', function(s)
     -- Update the settings table..
     if (s ~= nil) then
         hticks.settings = s;
-    end
-
+ 
+		-- Set the text attributes
+		local tc = hticks.settings.textColor;
+		local tc2 = hticks.settings.textColor2;
+		local oc = hticks.settings.outlineColor;
+		myFontObject:set_font_color(argbToHex(hticks.settings.textOpacity, tc[1], tc[2], tc[3]));
+		myFontObject:set_gradient_color(argbToHex(hticks.settings.textOpacity, tc2[1], tc2[2], tc2[3]));
+		myFontObject:set_outline_color(argbToHex(hticks.settings.textOpacity, oc[1], oc[2], oc[3]));
+		myFontObject:set_position_x(hticks.settings.position_x);
+		myFontObject:set_position_y(hticks.settings.position_y);
+	
+	end
+	
     -- Save the current settings..
     settings.save();
 end);
@@ -223,12 +280,45 @@ ashita.events.register('command', 'command_cb', function (e)
 	end
 end);
 
+
+--------------------------------------------------------------------
+ashita.events.register('mouse', 'mouse_cb', function (e)
+    if (dragActive) then
+        local currentX = myFontObject.settings.position_x;
+        local currentY = myFontObject.settings.position_y;
+        myFontObject:set_position_x(currentX + (e.x - lastPositionX));
+        myFontObject:set_position_y(currentY + (e.y - lastPositionY));
+        lastPositionX = e.x;
+        lastPositionY = e.y;
+        if (e.message == 514) or (IsControlHeld() == false) then
+            dragActive = false;
+            e.blocked = true;
+			
+			hticks.settings.position_x = myFontObject.settings.position_x;
+			hticks.settings.position_y = myFontObject.settings.position_y;
+			settings.save();
+            return;
+        end
+    end
+    
+    if (e.message == 513) then
+        if (HitTest(e.x, e.y)) and (IsControlHeld()) then
+            e.blocked = true;
+            dragActive = true;
+            lastPositionX = e.x;
+            lastPositionY = e.y;
+            return;
+        end
+    end
+end);
+
 --------------------------------------------------------------------
 --[[
 * event: d3d_present
 * desc : Event called when the Direct3D device is presenting a scene.
 --]]
 ashita.events.register('d3d_present', 'present_cb', function ()
+
 	if (hideWindow() == false) then
 		local player = GetPlayerEntity();
 
@@ -237,9 +327,11 @@ ashita.events.register('d3d_present', 'present_cb', function ()
 		else
 			if (player.Status ~= 33) then
 				hticks.heal = false;
+				myFontObject:set_visible(false);
 			end
 		
-			if ((player.Status == 33) or (hticks.settings.alwaysVisible[1] == true)) then
+			if ((player.Status == 33) or (hticks.settings.alwaysShow == true)) then
+				myFontObject:set_visible(true);
 				renderTickWindow(player);
 			end
 			
@@ -249,19 +341,6 @@ ashita.events.register('d3d_present', 'present_cb', function ()
 
 		end
 
-		--[[
-		selfIndex = party:GetMemberTargetIndex(0);
-		if selfIndex ~= nil then
-			local me = GetEntity(selfIndex)
-			if me ~= nil then
-				currentStatus = me.Status;
-			end
-		end
-
-		if currentStatus ~= nil then
-			if currentStatus == 33 then
-		]]
-		
-
 	end
+
 end);
